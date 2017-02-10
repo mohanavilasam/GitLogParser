@@ -1,10 +1,7 @@
 package gitlogparser;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -12,12 +9,16 @@ import java.util.logging.Logger;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 
 
 
@@ -27,7 +28,7 @@ public class GitLogParser {
 
 	public static void main(String[] args) {
 
-		System.out.println(GitLogParser.class.getClassLoader().getResource("logging.properties"));
+		//System.out.println(GitLogParser.class.getClassLoader().getResource("logging.properties"));
 		mysqlconn = new MySqlConn();
 		mysqlconn = iniDb();
 		Repository repository = null;
@@ -66,15 +67,31 @@ public class GitLogParser {
 
 						if (foundInThisBranch) {
 							for (int i = 0; i < commit.getParentCount(); i++) {
-								String issueInfoInsQuery = "INSERT INTO GitLogInfo(CommitSha, AuthorName, Message, ParentSHA, DiffInfo) VALUES ("
-										+ " '" + commit.getName() 										+ "' " + " , " 
-										+ " '" + commit.getAuthorIdent().getName().replaceAll("'", "")  + "' " + " , " 
-										+ " '" + commit.getFullMessage().replaceAll("'", "") 			+ "' " + " , " 
-										+ " '" + commit.getParent(i).getName() 							+ "' " + " , " 
-										+ " '" + "XYZ" 													+ "' " 
-										+ " );";
-								mysqlconn.executeDmlStmt(issueInfoInsQuery);
-
+								ObjectId head = repository.resolve(commit.getName() + "^{tree}");
+								ObjectId old = repository.resolve(commit.getParent(i).getName() + "^{tree}");
+								ObjectReader reader = repository.newObjectReader();
+								CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
+								oldTreeIter.reset(reader, old);
+								CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
+								newTreeIter.reset(reader, head);
+								List<DiffEntry> diffs = git.diff().setNewTree(newTreeIter).setOldTree(oldTreeIter).call();
+								int diffCount = diffs.size();
+								for (int k = 0; k < diffCount; k++) {
+									//diffs.get(k).getChangeType().toString();
+									//diffs.get(k).getOldPath();
+									//diffs.get(k).getNewPath();
+									String issueInfoInsQuery = "INSERT INTO GitLogInfo(CommitSha, AuthorName, Message, ParentSHA, DiffChangeType, DiffOldPath, DiffNewPath) VALUES ("
+											+ " '" + commit.getName() 										+ "' " + " , " 
+											+ " '" + commit.getAuthorIdent().getName().replaceAll("'", "")  + "' " + " , " 
+											+ " '" + commit.getFullMessage().replaceAll("'", "") 			+ "' " + " , " 
+											+ " '" + commit.getParent(i).getName() 							+ "' " + " , " 
+											+ " '" + diffs.get(k).getChangeType().toString()				+ "' " + " , " 
+											+ " '" + diffs.get(k).getOldPath()								+ "' " + " , " 
+											+ " '" + diffs.get(k).getNewPath()								+ "' " 
+											+ " );";
+									mysqlconn.executeDmlStmt(issueInfoInsQuery);
+									//System.out.println(issueInfoInsQuery);
+								}								
 							}
 
 						}
@@ -96,7 +113,11 @@ public class GitLogParser {
 		mysqlconn.executeDmlStmt("CREATE TABLE IF NOT EXISTS GitLogInfo " + 
 		"(" + "ID int NOT NULL AUTO_INCREMENT, "
 				+ "CommitSha VARCHAR(60), " + "AuthorName VARCHAR(60), " + "Message VARCHAR(530), "
-				+ "ParentSHA VARCHAR(60), " + "DiffInfo VARCHAR(60)," + "primary key (ID)" + 
+				+ "ParentSHA VARCHAR(60), " + "DiffInfo VARCHAR(60)," 
+				+ "DiffOldPath VARCHAR(255), " 
+				+ "DiffNewPath VARCHAR(255), "
+				+ "DiffChangeType VARCHAR(60), " 
+				+ "primary key (ID)" + 
 		");");
 		return mysqlconn;
 	}

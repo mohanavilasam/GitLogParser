@@ -13,7 +13,7 @@ public class MySqlConn {
 
 	private boolean connToDb() {
 		boolean status = false;
-		System.out.println(MySqlConn.class.getClassLoader().getResource("logging.properties"));
+		//System.out.println(MySqlConn.class.getClassLoader().getResource("logging.properties"));
 		try {			
 			Class.forName("com.mysql.jdbc.Driver");
 			con = DriverManager.getConnection(
